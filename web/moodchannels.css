@@ -22,6 +22,7 @@
 .mc-link:hover { text-decoration: underline; }
 .mc-row-text .mc-link { margin-left: .3em; }
 .mc-manage { border-top: 1px solid var(--line); padding-top: 10px; display: flex; flex-direction: column; gap: 10px; }
+.mc-manage-controls { display: flex; flex-direction: column; gap: 10px; }
 .mc-fold { align-self: flex-start; color: var(--text-2); font-size: 13px; }
 .mc-size { align-self: center; }
 
@@ -130,7 +131,10 @@
 .mc-band-step.down .i { transform: none; }
 .mc-band-name { display: flex; align-items: center; gap: 8px; min-width: 0; max-width: 100%; color: #fff; text-decoration: none;
   font-weight: 700; font-size: 18px; text-shadow: 0 1px 6px rgba(0,0,0,.55); }
-.mc-band-name { width: 100%; justify-content: flex-start; cursor: default; }
+.mc-band-name { width: 100%; justify-content: flex-start; cursor: pointer; outline: none; }
+.mc-band { cursor: pointer; }                           /* a click on it opens the now-playing page */
+.mc-band:active:not(:has(button:active)) .mc-band-name { opacity: .8; }
+.mc-band-name:focus-visible { box-shadow: 0 0 0 2px #fff; border-radius: 6px; }
 .mc-roll { display: grid; width: 100%; perspective: 260px; }           /* the picker wheel: mark and name roll as one */
 .mc-roll-item { grid-area: 1 / 1; display: flex; align-items: center; justify-content: flex-start; gap: 8px; width: max-content;
   white-space: nowrap; backface-visibility: hidden; transform-origin: 50% 50%; will-change: transform, opacity; }
@@ -152,7 +156,9 @@ html:root[data-ext-source="moodchannels"]:not(.mc-radio) #bar {
 #bar .mc-barbg.top { z-index: -1; }
 html:root[data-ext-source="moodchannels"]:not(.mc-radio) #bar .mc-barbg.on { opacity: 1; }
 html:root[data-ext-source="moodchannels"]:not(.mc-radio) #bar .slider .track { background: rgba(255,255,255,.22); }
-html:root[data-ext-source="moodchannels"]:not(.mc-radio) #bar .sig, html:root[data-ext-source="moodchannels"]:not(.mc-radio) #bar .out-btn { background: rgba(255,255,255,.10); color: #fff; }
+/* only the plain badge: MIKU's own plates (Hi-Res, DSD, upsampling, DSP, lossy) keep their colours, or the gold
+   upsampling plate turns into a see-through pill with white text that no longer says what it is */
+html:root[data-ext-source="moodchannels"]:not(.mc-radio) #bar .sig:not(.hires, .dsd, .upsample, .dsp, .q-low), html:root[data-ext-source="moodchannels"]:not(.mc-radio) #bar .out-btn { background: rgba(255,255,255,.10); color: #fff; }
 
 /* the now-playing page: dark and immersive in every theme, the channel's picture as the backdrop (lightly blurred so it stays recognisable) */
 html:root[data-ext-source="moodchannels"]:not(.mc-radio) #np {
@@ -191,7 +197,6 @@ html:root[data-ext-source="moodchannels"]:not(.mc-radio)[data-theme="vinyl"] #np
 /* the header (mark and name) 1.5× the first design's 15 px / 24 px */
 /* centred over the arrows (which are centred in the rail) */
 .mc-rail-head { display: flex; align-items: center; align-self: center; gap: 12px; margin: 0 0 9px; color: #fff; text-decoration: none; font-weight: 700; font-size: 22.5px; letter-spacing: .04em; opacity: .9; }
-.mc-rail-head:hover span { text-decoration: underline; }
 .mc-rail-head > .mc-brand { margin-right: -.04em; }      /* the letter spacing after the last letter: not counted in the centring */
 .mc-rail-logo { width: 36px; height: 36px; flex: none; }
 .mc-rail-step { all: unset; cursor: pointer; align-self: center; width: 64px; height: 22px; display: grid; place-items: center; border-radius: 8px; opacity: .7; }
@@ -364,6 +369,9 @@ html:root[data-ext-source="moodchannels"].mc-radio #np.nolyrics .np-wrap { paddi
 .mc-radio-band .mc-vote .i { width: 15px; height: 15px; }
 .mc-radio-band { max-width: 300px; }
 .mc-radio-rail .mc-radio-text { flex: 1; }
+/* the bar's radio label opens the now-playing page: the whole label answers the pointer (the 👍 / 👎 keep their own) */
+.mc-radio-band.mc-radio-open { cursor: pointer; outline: none; border-radius: 14px; }
+.mc-radio-open:focus-visible { box-shadow: inset 0 0 0 2px currentColor; }
 /* the queue drawer's header while MoodWave chooses what plays (MIKU's queueHead) */
 .mc-qhead { display: flex; align-items: center; gap: 12px; margin: 2px 4px 6px; padding: 10px 12px; border-radius: 12px;
   background: color-mix(in srgb, var(--pink) 9%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--pink) 22%, transparent); }
