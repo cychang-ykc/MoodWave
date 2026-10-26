@@ -93,14 +93,14 @@ const tick = () => sleep(20);
     p.continuation = m.c;
     await p.playList(['a1t1', 'a1t2', 'a2t1'], 0, false);
     check('not asked before the last track', m.asks.length === 0, m.asks.length);
-    await p.jumpTo(2); await tick();
+    await p.next(); await p.next(); await tick();
     check('asked once at the last track', m.asks.length === 1, m.asks.length);
     check('with what played, the source and chosen', m.asks[0] && m.asks[0].chosen === true && m.asks[0].played.join() === 'a1t1,a1t2,a2t1' && m.asks[0].source === null, m.asks[0]);
     check('its picks added, unknown ids left out', p.queue.slice(3).join() === 'a4t1,a4t2,a4t3', p.queue);
     check('its part starts after the list', p.continuedFrom === 3, p.continuedFrom);
     check('kept with the queue (settings)', p.s.queueContinuedFrom === 3, p.s.queueContinuedFrom);
     // the next asks go on in the Smart Playlist: its start stays where it was
-    await p.jumpTo(p.queue.length - 1); await tick();
+    await p.next(); await p.next(); await p.next(); await tick();
     check('asked again at its own end; the start stays', m.asks.length === 2 && p.continuedFrom === 3 && p.queue.length === 9, { asks: m.asks.length, from: p.continuedFrom, n: p.queue.length });
     check('it is told the last 50 at most', m.asks[1].played.length <= 50 && m.asks[1].played[m.asks[1].played.length - 1] === p.queue[5], m.asks[1].played.length);
   });
@@ -217,6 +217,37 @@ const tick = () => sleep(20);
     w.p.validate();
     check('all of its tracks gone from the library: none', w.p.continuedFrom === -1, w.p.continuedFrom);
     for (const al of lib.albums) for (const t of al.tracks) lib.tracks.set(t.id, t);
+  });
+
+  await group('a click on a track further on in the queue: the ones jumped over leave it', async () => {
+    const { p } = make({ autoContinue: 'off' });
+    const ten = ids(10), kept = [ten[0], ten[9]].join();
+    await p.playList(ten, 0, false);
+    await p.jumpTo(9);
+    check('the 8 between leave; the one that played stays, before the one chosen', p.queue.join() === kept && p.index === 1 && p.current.id === ten[9], { q: p.queue, i: p.index });
+    await p.jumpTo(0);
+    check('back into what was played: nothing leaves', p.queue.join() === kept && p.index === 0, { q: p.queue, i: p.index });
+    await p.jumpTo(1);
+    check('the next one: nothing to leave', p.queue.join() === kept && p.index === 1, { q: p.queue, i: p.index });
+    // shuffle on: the jumped-over tracks leave the order to go back to as well
+    const s = make({ autoContinue: 'off', shuffle: false });
+    await s.p.playList(ids(5), 0, false);
+    s.p.setShuffle(true);
+    const over = s.p.queue.slice(1, 3);
+    await s.p.jumpTo(3);
+    s.p.setShuffle(false);
+    check('shuffle off again: the jumped-over tracks do not come back', s.p.queue.length === 3 && !over.some(id => s.p.queue.includes(id)), { q: s.p.queue, over });
+    // the Smart Playlist's part: jumped into, it starts at the track chosen; past it, it moves up
+    const m = module(() => Promise.resolve(['a4t1', 'a4t2', 'a4t3']));
+    const c = make({ autoContinue: 'similar' }); c.p.continuation = m.c;
+    await c.p.playList(['a1t1', 'a1t2', 'a1t3'], 2, false); await tick();
+    check('(its part after the list)', c.p.continuedFrom === 3 && c.p.queue.length === 6, { from: c.p.continuedFrom, q: c.p.queue });
+    await c.p.jumpTo(4);
+    check('jumped into it: a4t1 leaves, the part starts at a4t2', c.p.queue.join() === 'a1t1,a1t2,a1t3,a4t2,a4t3' && c.p.continuedFrom === 3, { q: c.p.queue, from: c.p.continuedFrom });
+    const d = make({ autoContinue: 'similar' }); d.p.continuation = m.c;
+    await d.p.playList(['a1t1', 'a1t2', 'a1t3'], 2, false); await tick();
+    await d.p.jumpTo(0); await d.p.jumpTo(2);
+    check('a jump before it, over list tracks: the part moves up with it', d.p.queue.join() === 'a1t1,a1t3,a4t1,a4t2,a4t3' && d.p.continuedFrom === 2, { q: d.p.queue, from: d.p.continuedFrom });
   });
 
   await group('\'played\': what the module is told', async () => {
