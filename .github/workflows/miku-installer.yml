@@ -1,0 +1,44 @@
+# Builds MIKU's Windows installer (MIKU-Setup-<ver>.exe) with the latest MIKU Player, Daphne and MoodWave:
+# MIKU's main at the root, Daphne's main and this commit of MoodWave under Extensions\ (as MIKU.csproj finds
+# extension modules), then MIKU's windows\make-installer.ps1. The installer is kept as the run's artifact.
+name: MIKU installer
+
+on:
+  push:
+    branches: [claude/great-curie-h8d5pk]
+  workflow_dispatch:
+
+jobs:
+  installer:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: cychang-ykc/MIKU-Player
+          ref: main
+          path: miku
+      - uses: actions/checkout@v4
+        with:
+          repository: cychang-ykc/Daphne
+          ref: main
+          path: miku/Extensions/Daphne
+      - uses: actions/checkout@v4
+        with:
+          path: miku/Extensions/MoodWave
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Commits
+        shell: bash
+        run: for d in miku miku/Extensions/Daphne miku/Extensions/MoodWave; do echo "$d $(git -C $d log -1 --format='%h %ci %s')"; done
+      - name: Installer
+        shell: pwsh
+        run: |
+          & powershell -NoProfile -ExecutionPolicy Bypass -File miku\windows\make-installer.ps1
+          Get-Content miku\windows\installer.log -Tail 60
+          if ((Get-Content miku\windows\installer-result.txt) -ne 'INSTALLER OK') { Get-Content miku\windows\installer.log; exit 1 }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MIKU-Setup
+          path: miku/MIKU-Setup/MIKU-Setup-*.exe
+          compression-level: 0
