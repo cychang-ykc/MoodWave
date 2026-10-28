@@ -37,6 +37,7 @@ jobs:
           & powershell -NoProfile -ExecutionPolicy Bypass -File miku\windows\make-installer.ps1
           Get-Content miku\windows\installer.log -Tail 60
           if ((Get-Content miku\windows\installer-result.txt) -ne 'INSTALLER OK') { Get-Content miku\windows\installer.log; exit 1 }
+          exit 0
       - uses: actions/upload-artifact@v4
         with:
           name: MIKU-Setup
