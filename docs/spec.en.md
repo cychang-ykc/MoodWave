@@ -449,6 +449,7 @@ MoodWave calculates the last pick again only when all of these conditions are tr
 - The current track is directly before the last track in the queue.
 - The last track is a pick of the Smart Playlist. The listener did not add it.
 - The current track has no Smart Playlist vote. A vote already changes the next pick (6.5).
+- The last pick has no 👍. If the listener gave 👍 to it in the queue drawer, MoodWave keeps it (7.2).
 - The current track is 45 seconds long or more.
 
 MoodWave does this one time for each track.

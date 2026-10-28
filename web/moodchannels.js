@@ -895,7 +895,8 @@
    * The Smart Playlist's pick after the track playing is picked again once that track gets to 30 s (by its position:
    * a move of it there counts too), one time for each track (spec 6.3). MIKU asked for the pick as the track started,
    * when it was no seed yet; from 30 s on it is one (0.6). Not for a track with a Smart Playlist vote (the vote changed
-   * the pick already), nor one shorter than 45 s (its pick may be in the player's hands for the next track already).
+   * the pick already), nor when the listener gave the pick itself 👍 in the queue drawer (they want it), nor for a track
+   * shorter than 45 s (its pick may be in the player's hands for the next track already).
    */
   const HEARD = { at: 30, min: 45 };
 
@@ -915,8 +916,9 @@
     if (ids[i] !== id || i !== ids.length - 2) return;     // the track playing just before the queue's last
     const src = rowSource(q, i + 1);
     if (!src || src.ext !== 'moodchannels' || !src.smart) return;   // a Smart Playlist pick (radios and channels: not by what plays)
-    const v = await MC.api.rpc('radio.vote.many', { ids: [id], source: src }).catch(() => null);
-    if (!v || !v.known || (v.votes || {})[id]) return;
+    const pick = ids[i + 1];
+    const v = await MC.api.rpc('radio.vote.many', { ids: [id, pick], source: src }).catch(() => null);
+    if (!v || !v.known || (v.votes || {})[id] || (v.votes || {})[pick] > 0) return;
     repickAfter(id, i);                                      // the last track a pick (not one the listener queued): checked there
   }
 
