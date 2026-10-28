@@ -708,7 +708,7 @@ The folded section "管理分析資料" has these buttons:
 
 | Button | Effect |
 |---|---|
-| 顯示無法分析的曲目 | Shows the tracks that the basic analysis cannot read, with the cause. |
+| 顯示無法分析的曲目 | Shows the tracks that the basic analysis cannot read, with the cause. The open list follows the count: after 重新分析, and when a file leaves the library. |
 | 重新分析失敗的曲目 | Analyses these tracks again. |
 | 全部重新分析 | Removes all basic analysis results and analyses the library again. The votes stay. |
 | 刪除 AI 資料 | Removes the model and all embeddings, and turns off the advanced AI. |
@@ -721,7 +721,7 @@ MoodWave keeps its data in `library.db` (SQLite) in the MIKU data folder, in `ex
 
 | Table | Contents |
 |---|---|
-| `tracks` | For each file: size, time, DSP version, result or error, descriptors, key, duration, channels, loudness |
+| `tracks` | For each file: size, time, DSP version, result or error, descriptors, key, duration, channels, loudness. The error of a file the library no longer has is removed; a result stays |
 | `embeddings` | For each file: the windows, the windows done, the sum of their embeddings, the model version |
 | `plays` | For each play: path, time, seconds played, duration, skipped or stopped, the type of list |
 | `votes` | Channel votes: track, channel, +1 or −1 |

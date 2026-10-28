@@ -718,6 +718,31 @@ sealed class AnalysisStore : IDisposable
         }
     }
 
+    /// <summary>
+    /// Drops the failed entries of files the library no longer has (deleted, or moved away): in the database, then in
+    /// memory. Only failed ones: a file analysed well keeps its analysis while its folder is out of the library a while.
+    /// </summary>
+    public int ForgetFailedGone(IReadOnlySet<string> library)
+    {
+        lock (_lock)
+        {
+            var drop = _entries.Where(kv => !kv.Value.Ok && !library.Contains(kv.Key)).Select(kv => kv.Key).ToList();
+            if (drop.Count == 0) return 0;
+            if (_db != null)
+            {
+                using var tx = _db.BeginTransaction();
+                using var cmd = _db.CreateCommand();
+                cmd.Transaction = tx;
+                cmd.CommandText = "DELETE FROM tracks WHERE path = $p AND ok = 0";
+                var p = cmd.Parameters.Add("$p", SqliteType.Text);
+                foreach (var k in drop) { p.Value = k; cmd.ExecuteNonQuery(); }
+                tx.Commit();
+            }
+            foreach (var k in drop) _entries.Remove(k);
+            return drop.Count;
+        }
+    }
+
     public void Dispose()
     {
         lock (_lock)

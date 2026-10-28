@@ -160,10 +160,11 @@
   async function drawFailed() {
     const box = MC.failBox;
     if (!box) return;
-    box.textContent = '';
-    if (!MC.failOpen || !box.isConnected) return;
-    const list = await MC.api.rpc('failed');
-    if (!box.isConnected || !MC.failOpen) return;
+    if (!MC.failOpen || !box.isConnected) { box.textContent = ''; return; }
+    // the list as it is shown stays until the new one comes (redrawn as the failed count changes: no flicker)
+    const seq = MC.failSeq = (MC.failSeq || 0) + 1;
+    const list = await MC.api.rpc('failed').catch(() => null);
+    if (!list || seq !== MC.failSeq || !box.isConnected || !MC.failOpen) return;
     box.textContent = '';
     if (!list.length) { box.append(h('div', { class: 'mc-line mc-dim' }, '沒有無法分析的曲目')); return; }
     for (const f of list) {
@@ -181,13 +182,15 @@
   // what decides which analysis options show: the AI on, its GPU setting, where it runs
   const methodKey = st => { const ai = (st && st.ai) || {}; return [!!ai.enabled, ai.gpu !== false, ai.device || ''].join('|'); };
   const set = st => {
-    const was = methodKey(MC.status);
+    const was = methodKey(MC.status), failed = MC.status && MC.status.failed;
     MC.status = st;
     if (MC.aiSwitch) MC.aiSwitch.classList.toggle('on', !!(st && st.ai && st.ai.enabled));
     if (methodKey(st) !== was) drawMethod();         // the GPU and segments only while the AI is on; its threads on the CPU
     foldCards();
     showNav();
     drawProgress();
+    // the open list of failed tracks follows them: analysed again (重新分析), or a file deleted from the library
+    if (MC.failOpen && st && st.failed !== failed) drawFailed();
   };
   const refresh = () => MC.api.rpc('status').then(set);
 

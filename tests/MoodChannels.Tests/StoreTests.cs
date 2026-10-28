@@ -107,4 +107,40 @@ public class StoreTests : IDisposable
         Assert.True(AnalysisStore.NeedsLoudness(again.Get(file)!));
         again.Dispose();
     }
+
+    [Fact]
+    public void A_failed_file_deleted_from_the_library_is_forgotten_and_one_analysed_well_is_kept()
+    {
+        string model = Directory.CreateDirectory(Path.Combine(_dir, "model")).FullName;
+        ChannelModelTests.Write(model, weights: true, thresholds: true);
+        static Entry Failed() => new() { Size = 0, Mtime = 1, Dsp = Dsp.DspFeatures.Version, Ok = false, Error = "ffmpeg failed: empty", At = DateTime.UtcNow };
+        string kept = Path.Combine(_dir, "kept.flac"), gone = Path.Combine(_dir, "Gone.flac"), well = Path.Combine(_dir, "well.flac");
+        var store = new AnalysisStore(_dir);
+        store.Load();
+        store.Put(kept, Failed());
+        store.Put(gone, Failed());
+        store.Put(well, Analysed());
+        // the library: kept.flac still there (in other letter case), gone.flac and well.flac deleted
+        var tracks = new List<MoodTrack> { new("k", kept.ToUpperInvariant(), "A", 200, 0, 1) };
+        var logs = new List<string>();
+        var queue = new AnalysisQueue(store, new Analyzer(model), () => tracks, () => null, l => { lock (logs) logs.Add(l); });
+        queue.Refresh();
+        Assert.NotNull(store.Get(kept));
+        Assert.Null(store.Get(gone));
+        Assert.NotNull(store.Get(well));                    // an analysis is not thrown away for a folder out of the library a while
+        Assert.Contains(logs, l => l.Contains("1 failed files no longer in the library forgotten"));
+        // no library at all (the host's list not there yet): nothing forgotten
+        tracks.Clear();
+        queue.Refresh();
+        Assert.NotNull(store.Get(kept));
+        queue.Stop();
+        store.Dispose();
+
+        var again = new AnalysisStore(_dir);                // the next start: gone from the database as well
+        again.Load();
+        Assert.Null(again.Get(gone));
+        Assert.NotNull(again.Get(kept));
+        Assert.NotNull(again.Get(well));
+        again.Dispose();
+    }
 }

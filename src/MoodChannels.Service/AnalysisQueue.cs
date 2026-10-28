@@ -115,9 +115,11 @@ sealed class AnalysisQueue
         var loud = new List<Job>();
         HashSet<string> loudFailed;
         lock (_lock) loudFailed = new(_loudFailed, StringComparer.OrdinalIgnoreCase);
+        var library = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var t in tracks.OrderBy(t => t.Path, StringComparer.OrdinalIgnoreCase))
         {
             if (string.IsNullOrEmpty(t.Path) || !Path.IsPathFullyQualified(t.Path)) continue;
+            library.Add(t.Path);
             total++;
             var e = _store.Get(t.Path);
             if (AnalysisStore.Current(e, t.Size, t.Mtime))
@@ -135,6 +137,13 @@ sealed class AnalysisQueue
                 continue;
             }
             todo.Add(new Job(t.Path, t.Size, t.Mtime, false));
+        }
+        // a failed file deleted (or moved away) is not kept: its entry would stay in the database for good. Not with no
+        // library at all (the host's list not there yet at the start)
+        if (library.Count > 0)
+        {
+            try { int gone = _store.ForgetFailedGone(library); if (gone > 0) _log($"analysis: {gone} failed files no longer in the library forgotten"); }
+            catch (Exception ex) { _log("analysis: failed files no longer in the library not forgotten: " + ex.Message); }
         }
         todo.AddRange(loud);                                     // after every file still to analyse
         lock (_lock)
