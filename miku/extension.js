@@ -138,7 +138,8 @@ module.exports = {
       h.onPlaybackChanged(() => { if (!stopping) setTimeout(sendUpcoming, 400); });
     // what played, for the radio and the Smart Playlist (plays, quick skips); an older MIKU has no onTrackPlayed
     if (typeof h.onTrackPlayed === 'function')
-      h.onTrackPlayed(p => send({ op: 'played', id: p.id, seconds: p.seconds, duration: p.duration, skipped: !!p.skipped, stopped: !!p.stopped, source: p.source || null }));
+      h.onTrackPlayed(p => send({ op: 'played', id: p.id, seconds: p.seconds, duration: p.duration, skipped: !!p.skipped, stopped: !!p.stopped,
+        source: p.source || null, back: !!p.back }));
   },
 
   stop() {

@@ -907,7 +907,8 @@
       if (MC.heard !== id) { MC.heard = id; MC.heardDone = false; }
       if (MC.heardDone || App.pos < HEARD.at) return;
       MC.heardDone = true;
-      if ((s.dur || 0) >= HEARD.min) repickHeard(id);
+      // heard after all: an earlier quick skip of it no longer counts (spec 5.4), before the pick is taken again
+      MC.api.rpc('radio.heard', { id }).catch(() => null).then(() => { if ((s.dur || 0) >= HEARD.min) repickHeard(id); });
     }, 1000);
   }
 

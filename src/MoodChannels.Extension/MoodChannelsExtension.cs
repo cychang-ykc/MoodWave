@@ -45,7 +45,12 @@ public sealed class MoodChannelsExtension : IMikuExtension, ILoudnessProvider, I
         }
 
         void Subscribe(IExtensionHost h) =>
-            h.TrackPlayed += p => TrackPlayed?.Invoke(new MoodPlayed(p.Id, p.Seconds, p.Duration, p.Skipped, p.Stopped, p.Source));
+            h.TrackPlayed += p => TrackPlayed?.Invoke(new MoodPlayed(p.Id, p.Seconds, p.Duration, p.Skipped, p.Stopped, p.Source, Back(p)));
+
+        // ExtPlayed.Back (going back to the previous track) is newer than TrackPlayed: read where MIKU has it, so the
+        // module builds against an older MIKU.Extensibility and runs on an older MIKU (there it is never set)
+        static readonly System.Reflection.PropertyInfo? BackProperty = typeof(ExtPlayed).GetProperty("Back");
+        static bool Back(ExtPlayed p) => BackProperty?.GetValue(p) is true;
 
         public string DataDir => _h.DataDir;
         public string ModuleDir => _h.ExtensionDir;

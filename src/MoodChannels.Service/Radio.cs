@@ -49,7 +49,7 @@ sealed class Radio
     float[] _vec = Array.Empty<float>();
     int _rows;
     string? _indexModel;
-    readonly List<(DateTime At, float[] Vec)> _skips = new();
+    readonly List<(DateTime At, string Path, float[] Vec)> _skips = new();
     readonly Dictionary<string, (Entry E, double Bpm)> _bpms = new(StringComparer.OrdinalIgnoreCase);   // by the store entry it was worked out from
     int _forgets;                                   // Forget calls: an Ensure reading the store meanwhile drops what it read
     List<(ClapEntry E, float[] Sum)>? _added;       // embeddings stored while an Ensure reads the store: put in after it
@@ -157,18 +157,28 @@ sealed class Radio
         return s;
     }
 
-    /// <summary>A track played: one skipped within 30 s makes the ones like it less likely for a while.</summary>
+    /// <summary>
+    /// A track played: one skipped within 30 s (a quick skip) makes the ones like it less likely for a while; one that
+    /// played 30 s or more cancels its own quick skips (<see cref="Heard"/>).
+    /// </summary>
     public void Played(string path, double seconds, bool skipped)
     {
-        if (!skipped || seconds >= 30) return;
+        if (seconds >= 30) { Heard(path); return; }
+        if (!skipped) return;
         var v = Vec(path);
         if (v == null) return;
         lock (_lock)
         {
-            _skips.Add((DateTime.UtcNow, v));
+            _skips.Add((DateTime.UtcNow, path, v));
             _skips.RemoveAll(s => s.At < DateTime.UtcNow.AddHours(-3));
             if (_skips.Count > 30) _skips.RemoveRange(0, _skips.Count - 30);
         }
+    }
+
+    /// <summary>The listener heard the track for 30 s after all (it played again): its quick skips no longer count.</summary>
+    public void Heard(string path)
+    {
+        lock (_lock) _skips.RemoveAll(s => string.Equals(s.Path, path, StringComparison.OrdinalIgnoreCase));
     }
 
     public sealed record Seed(MoodTrack Track, double Weight);
