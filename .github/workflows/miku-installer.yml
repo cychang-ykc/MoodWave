@@ -1,5 +1,5 @@
 # Builds MIKU's Windows installer (MIKU-Setup-<ver>.exe) with the latest MIKU Player, Daphne and MoodWave:
-# MIKU's main at the root, Daphne's main and this commit of MoodWave under Extensions\ (as MIKU.csproj finds
+# MIKU's MIKU_REF at the root (main lacks the extension interfaces MoodWave uses: ILoudnessProvider, IQueueContinuation), Daphne's main and this commit of MoodWave under Extensions\ (as MIKU.csproj finds
 # extension modules), then MIKU's windows\make-installer.ps1. The installer is kept as the run's artifact.
 name: MIKU installer
 
@@ -8,6 +8,9 @@ on:
     branches: [claude/great-curie-h8d5pk]
   workflow_dispatch:
 
+env:
+  MIKU_REF: fix/paused-change-asks
+
 jobs:
   installer:
     runs-on: windows-latest
@@ -15,7 +18,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: cychang-ykc/MIKU-Player
-          ref: main
+          ref: ${{ env.MIKU_REF }}
           path: miku
       - uses: actions/checkout@v4
         with:
@@ -37,6 +40,8 @@ jobs:
           & powershell -NoProfile -ExecutionPolicy Bypass -File miku\windows\make-installer.ps1
           Get-Content miku\windows\installer.log -Tail 60
           if ((Get-Content miku\windows\installer-result.txt) -ne 'INSTALLER OK') { Get-Content miku\windows\installer.log; exit 1 }
+          # a module that does not build is left out with a warning: every one must be in the installer
+          foreach ($m in 'daphne', 'moodchannels') { if (-not (Test-Path "miku\windows\dist\MIKU\ext\$m")) { Get-Content miku\windows\installer.log; Write-Error "ext\$m is not in the installer"; exit 1 } }
           exit 0
       - uses: actions/upload-artifact@v4
         with:
