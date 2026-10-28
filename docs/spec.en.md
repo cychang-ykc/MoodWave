@@ -440,6 +440,27 @@ MIKU asks MoodWave for a pick when the last track in the queue starts (7.1).
 MoodWave gives one pick. MIKU adds it to the end of the queue.
 If MoodWave gives no pick, MIKU adds random tracks from the library.
 
+At that time, the current track starts. Thus it is not a seed yet (6.4).
+When the current track gets to 30 seconds, MoodWave calculates the last pick again.
+Then the current track is a seed.
+
+MoodWave calculates the last pick again only when all of these conditions are true:
+
+- The current track is directly before the last track in the queue.
+- The last track is a pick of the Smart Playlist. The listener did not add it.
+- The current track has no Smart Playlist vote. A vote already changes the next pick (6.5).
+- The current track is 45 seconds long or more.
+
+MoodWave does this one time for each track.
+MoodWave uses the position in the track, not the time that the track played.
+Thus, if the listener moves the position to 30 seconds or more, MoodWave also calculates the last pick again.
+
+MoodWave adds the new pick before it removes the old pick. Thus MIKU does not ask for a pick at that time.
+If the queue changes while MoodWave calculates, MoodWave does not change the queue.
+
+Radios and channels do not calculate a pick again at 30 seconds.
+The seeds of a radio do not change with the current track (5.2). A channel selects its tracks at random (4.6).
+
 ### 6.4 Seeds
 
 MoodWave calculates the seeds again for each pick.
@@ -447,10 +468,10 @@ Thus the seeds move forward as the tracks play.
 
 The seeds are:
 
-1. The current track. Its weight is 1.
-2. Up to 10 other tracks from the play records of the last 2 hours.
+1. Up to 10 tracks from the play records of the last 2 hours.
+2. The current track, if it played for 30 seconds or more.
 
-The last track that played is the first in this list.
+The last track that played is track 0 in the list of play records.
 The weight of track k in this list is 0.9 to the power k, but not less than 0.5.
 Then MoodWave multiplies the weight by a listening factor:
 
@@ -460,17 +481,26 @@ Then MoodWave multiplies the weight by a listening factor:
 | 30 seconds or more, but less than half | 0.6 |
 | Less than 30 seconds, and the listener skipped it | The track is not a seed. |
 
-Example: Tracks a, b, c and d played fully, in that sequence. Track e is the current track.
+The weight of the current track is 0.6. This weight does not increase when more of the track plays.
+Thus the tracks that the listener heard to the end have more effect than the current track.
+For the current track, MoodWave uses the position in the track.
+
+A track that the listener skips at once is never a seed.
+Thus it does not change the next pick.
+
+If no other track is a seed, the current track is a seed with the weight 0.6. This also applies before 30 seconds.
+
+Example: Tracks a, b, c and d played fully, in that sequence. Track e is the current track. It is at 40 seconds.
 
 | Seed | Weight |
 |---|---|
-| e | 1 |
-| d | 0.9 |
-| c | 0.81 |
-| b | 0.73 |
-| a | 0.66 |
+| d | 1 |
+| c | 0.9 |
+| b | 0.81 |
+| a | 0.73 |
+| e | 0.6 |
 
-If there are no play records in the last 2 hours, MoodWave uses the last 10 tracks of the queue.
+If there are no play records in the last 2 hours, MoodWave uses the 10 tracks of the queue before the current track.
 The weights are the same as in the list above.
 
 The tracks from the play records of the last 2 hours are also never picks.
@@ -510,24 +540,26 @@ These tracks played in the last 2 hours, in this sequence:
 | b | It played fully. | 👍 |
 | c | The track is 240 seconds long. It played for 80 seconds. | — |
 | d | The listener skipped it after 10 seconds. | — |
-| e | This is the current track: 120 BPM, C major. | — |
+| e | This is the current track: 120 BPM, C major. It is at 30 seconds. | — |
 
 The Smart Playlist votes also have 👍 on track x and 👎 on track y.
 Track x did not play in the last 2 hours.
+
+Track e is at 30 seconds. Thus MoodWave calculates the last pick again (6.3).
 
 #### Step 1: The seeds
 
 | Seed | Calculation | Weight |
 |---|---|---|
-| e | The current track | 1.00 |
 | d | It played for less than 30 seconds. | Not a seed |
-| c | Track 1 in the list: 0.9 × 0.6 (30 seconds or more, but less than half) | 0.54 |
-| b | Track 2 in the list: 0.81 × 1 (fully) × 1.25 (👍) | 1.01 |
-| a | Track 3 in the list: 0.729 × 1 | 0.73 |
+| c | Track 0 in the list: 1 × 0.6 (30 seconds or more, but less than half) | 0.60 |
+| b | Track 1 in the list: 0.9 × 1 (fully) × 1.25 (👍) | 1.125 |
+| a | Track 2 in the list: 0.81 × 1 | 0.81 |
+| e | The current track, at 30 seconds | 0.60 |
 | x | It has 👍 and it is not a seed. Thus it becomes a seed. | 0.50 |
 | y | It has 👎. | Not a seed. MoodWave avoids tracks like it. |
 
-Track d is not a seed. Thus track c is track 1 in the list.
+Track d is not a seed. Thus track c is track 0 in the list.
 
 #### Step 2: The scores
 
@@ -536,20 +568,23 @@ The highest result is the start score. Then MoodWave subtracts the decreases.
 
 | Track | Similarity (only the values that have an effect) | Highest result | Decrease | Score |
 |---|---|---|---|---|
-| P | e 0.90 | 0.90 | — | 0.90 |
-| Q | e 0.78, b 0.85 | 0.85 × 1.01 = 0.861 (from b) | — | 0.861 |
-| R | e 0.84 | 0.84 | — | 0.84 |
-| U | e 0.83 | 0.83 | — | 0.83 |
-| V | e 0.82 | 0.82 | — | 0.82 |
-| W | e 0.80 | 0.80 | — | 0.80 |
-| S | e 0.86 | 0.86 | Played 10 days ago: −0.13. Similarity to y is 0.93: −0.15. | 0.58 |
+| P | e 0.98 | 0.98 × 0.6 = 0.588 (from e) | — | 0.588 |
+| Q | e 0.78, b 0.85 | 0.85 × 1.125 = 0.956 (from b) | — | 0.956 |
+| R | b 0.83 | 0.83 × 1.125 = 0.934 | — | 0.934 |
+| U | b 0.82 | 0.82 × 1.125 = 0.923 | — | 0.923 |
+| V | b 0.81 | 0.81 × 1.125 = 0.911 | — | 0.911 |
+| W | b 0.79 | 0.79 × 1.125 = 0.889 | — | 0.889 |
+| S | b 0.86 | 0.86 × 1.125 = 0.968 | Played 10 days ago: −0.13. Similarity to y is 0.93: −0.15. | 0.688 |
 | T | x 0.95, e 0.40 | 0.95 × 0.5 = 0.475 | — | 0.475 |
+
+Track P is almost the same as e (0.98). But the weight of e is only 0.6.
+Thus track P does not have a high score. The current track has less effect than the tracks that the listener heard.
 
 Track Q is not very alike to e (0.78). But it is very alike to b, which has 👍.
 Thus track Q has a high score. This is the effect of 👍.
 
-Track S starts at 0.86. It played 10 days ago, and it is very alike to y, which has 👎.
-Thus its score decreases to 0.58.
+Track S starts at 0.968. It played 10 days ago, and it is very alike to y, which has 👎.
+Thus its score decreases to 0.688.
 
 The decrease for a track that played recently is 0.15 for 7 days.
 After 7 days, the decrease becomes smaller in equal steps. It is 0 at 30 days.
@@ -565,14 +600,14 @@ Other tracks obey all rules. Thus MoodWave does not ignore a rule, and track P i
 MoodWave selects 5 tracks at random from the 20 best tracks that obey the rules.
 The chance of a track changes with `exp((score − highest score) / 0.03)`.
 
-| Track | Difference from the highest score (Q, 0.861) | Relative chance |
+| Track | Difference from the highest score (Q, 0.956) | Relative chance |
 |---|---|---|
 | Q | 0 | 1.00 |
-| R | 0.021 | 0.50 |
-| U | 0.031 | 0.36 |
-| V | 0.041 | 0.25 |
-| W | 0.061 | 0.13 |
-| S | 0.281 | 0.0001 |
+| R | 0.022 | 0.48 |
+| U | 0.033 | 0.33 |
+| V | 0.045 | 0.22 |
+| W | 0.067 | 0.11 |
+| S | 0.268 | 0.0001 |
 
 For each 0.03 of difference, the chance decreases to about one third.
 Thus the 5 tracks are almost always tracks with the highest scores.
@@ -614,6 +649,8 @@ MIKU asks MoodWave for the next track in these conditions:
 
 If the queue changes while MoodWave calculates, MIKU does not use the answer.
 If the current track is still the last track, MIKU asks again.
+
+When the current track gets to 30 seconds, MoodWave can also calculate the last pick of the Smart Playlist again (6.3).
 
 ### 7.2 Votes in the queue
 

@@ -442,7 +442,8 @@ public sealed class MoodService
 
     void Unpicked(string id) { lock (_picked) _picked.Remove(id); }
 
-    IReadOnlyList<string> PickNext(IReadOnlyList<string> played, JsonElement? source, bool chosen)
+    /// <param name="playingAt">where the track playing (the last of <paramref name="played"/>) is, in seconds; 0 when not known.</param>
+    IReadOnlyList<string> PickNext(IReadOnlyList<string> played, JsonElement? source, bool chosen, double playingAt = 0)
     {
         IReadOnlyList<string> none = Array.Empty<string>();
         // a channel goes on by itself, one track at a time at random from it (no advanced AI needed)
@@ -464,7 +465,7 @@ public sealed class MoodService
         {
             if (!chosen) return none;                    // our own list (a channel), but the listener did not ask for more
             // the Smart Playlist's 👍 come in as light seeds (0.5: what was heard leads), its 👎 stay out
-            (seeds, avoid) = WithVotes(SmartOrigin, Listened(history, tracks, out var heard), tracks, like: 0.5);
+            (seeds, avoid) = WithVotes(SmartOrigin, Listened(history, tracks, playingAt, out var heard), tracks, like: 0.5);
             // what was heard lately is not played again either, wherever it played
             var inHistory = new HashSet<string>(history.Select(t => t.Path), StringComparer.OrdinalIgnoreCase);
             history = heard.Where(t => !inHistory.Contains(t.Path)).Concat(history).ToList();
@@ -509,38 +510,55 @@ public sealed class MoodService
 
     /// <summary>
     /// What to go on from after an ordinary list: what the listener actually heard, not the list's order (they may
-    /// have jumped about in it, or played things from elsewhere). The track playing, then the last 10 others heard in
-    /// the last 2 hours (from the plays): played more than half at full weight, from 30 s on ×0.6, skipped sooner
-    /// not at all (the radio passes over ones like those anyway); the later the heavier, w = max(0.5, 0.9^k). With no
-    /// plays yet: the list's last 10 tracks, weighted the same. <paramref name="heard"/>: every track heard lately.
+    /// have jumped about in it, or played things from elsewhere). <paramref name="heard"/>: every track heard lately.
+    /// <paramref name="playingAt"/>: where the track playing (the list's last) is, in seconds; 0 when not known (MIKU
+    /// asks as a track starts). The weights: <see cref="HeardSeeds"/>.
     /// </summary>
-    List<Radio.Seed> Listened(IReadOnlyList<MoodTrack> list, IReadOnlyList<MoodTrack> tracks, out List<MoodTrack> heard)
+    List<Radio.Seed> Listened(IReadOnlyList<MoodTrack> list, IReadOnlyList<MoodTrack> tracks, double playingAt, out List<MoodTrack> heard)
     {
-        static double W(int k) => Math.Max(0.5, Math.Pow(0.9, k));
         var byPath = tracks.Where(t => !string.IsNullOrEmpty(t.Path)).GroupBy(t => t.Path, StringComparer.OrdinalIgnoreCase)
                            .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
         var plays = _store.RecentPlays(DateTime.UtcNow - ListenedSpan, 60);
         heard = plays.Where(p => byPath.ContainsKey(p.Path)).Select(p => byPath[p.Path]).DistinctBy(t => t.Path.ToLowerInvariant()).ToList();
+        return HeardSeeds(list, playingAt, plays.Select(p => (p.Path, p.Seconds, p.Duration, p.Skipped)).ToList(), byPath);
+    }
+
+    /// <summary>
+    /// The Smart Playlist's seeds (spec 6.4). The last 10 tracks heard in the last 2 hours (<paramref name="plays"/>,
+    /// the latest first): played half or more ×1, from 30 s on ×0.6, skipped sooner not at all (the radio passes over
+    /// ones like those anyway); the later the heavier, w = max(0.5, 0.9^k), k = 0 for the latest seed. With no plays
+    /// yet: the 10 tracks of the list before the one playing, weighted the same. The track playing (the list's last)
+    /// is not sure yet (it may be skipped at once): a seed from 30 s on (<paramref name="playingAt"/>, its position)
+    /// at 0.6 however much of it played, or at 0.6 when nothing else is a seed.
+    /// </summary>
+    internal static List<Radio.Seed> HeardSeeds(IReadOnlyList<MoodTrack> list, double playingAt,
+        IReadOnlyList<(string Path, double Seconds, double Duration, bool Skipped)> plays, IReadOnlyDictionary<string, MoodTrack> byPath)
+    {
+        static double W(int k) => Math.Max(0.5, Math.Pow(0.9, k));
         var seeds = new List<Radio.Seed>();
+        var playing = list.Count > 0 ? list[^1] : null;
         var taken = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        if (list.Count > 0) { seeds.Add(new Radio.Seed(list[^1], 1)); taken.Add(list[^1].Path); }   // playing now
+        if (playing != null) taken.Add(playing.Path);
         if (plays.Count == 0)
         {
-            var last = list.Take(list.Count - 1).Reverse().Take(ListenedSeeds - 1).ToList();
-            seeds.AddRange(last.Select((t, i) => new Radio.Seed(t, W(i + 1))));
-            return seeds;
+            var last = list.Take(list.Count - 1).Reverse().Take(ListenedSeeds).ToList();
+            seeds.AddRange(last.Select((t, i) => new Radio.Seed(t, W(i))));
         }
-        foreach (var p in plays)
-        {
-            if (seeds.Count >= ListenedSeeds + 1) break;
-            if (!byPath.TryGetValue(p.Path, out var t) || !taken.Add(p.Path)) continue;
-            if (p.Skipped && p.Seconds < 30) continue;
-            double share = p.Duration > 0 ? p.Seconds / p.Duration : 1;
-            double factor = share >= 0.5 ? 1 : 0.6;
-            seeds.Add(new Radio.Seed(t, factor * W(seeds.Count)));
-        }
+        else
+            foreach (var p in plays)
+            {
+                if (seeds.Count >= ListenedSeeds) break;
+                if (!byPath.TryGetValue(p.Path, out var t) || !taken.Add(p.Path)) continue;
+                if (p.Skipped && p.Seconds < 30) continue;
+                double share = p.Duration > 0 ? p.Seconds / p.Duration : 1;
+                double factor = share >= 0.5 ? 1 : 0.6;
+                seeds.Add(new Radio.Seed(t, factor * W(seeds.Count)));
+            }
+        if (playing != null && (playingAt >= PlayingHeard || seeds.Count == 0)) seeds.Add(new Radio.Seed(playing, PlayingWeight));
         return seeds;
     }
+
+    const double PlayingHeard = 30, PlayingWeight = 0.6;   // the track playing: a seed from 30 s on, at most 0.6
 
     /// <summary>
     /// Starts a radio (the page's menus): kind track (ids: the track), album (ids: its tracks; it starts with the one
@@ -671,6 +689,8 @@ public sealed class MoodService
             a.ValueKind == JsonValueKind.Object && a.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
         bool? Bool(string name) =>
             a.ValueKind == JsonValueKind.Object && a.TryGetProperty(name, out var v) && v.ValueKind is JsonValueKind.True or JsonValueKind.False ? v.GetBoolean() : null;
+        double Num(string name, double fallback) =>
+            a.ValueKind == JsonValueKind.Object && a.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.Number && v.TryGetDouble(out double d) && double.IsFinite(d) ? d : fallback;
         List<string> Strs(string name) =>
             a.ValueKind == JsonValueKind.Object && a.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.Array
                 ? v.EnumerateArray().Where(x => x.ValueKind == JsonValueKind.String).Select(x => x.GetString()!).ToList() : new List<string>();
@@ -745,15 +765,17 @@ public sealed class MoodService
             }
             case "radio.next":
             {
-                // a pick queued next taken again after a vote (the page swaps it): played = the queue up to before it;
+                // a pick queued next taken again (the page swaps it), after a vote or once the track playing has played
+                // 30 s: played = the queue up to before it; at = where the track playing is, when it is played's last;
                 // only for a channel, a radio or the Smart Playlist (its source), and it is a pick then too
                 JsonElement? source = a.ValueKind == JsonValueKind.Object && a.TryGetProperty("source", out var src) ? src.Clone() : null;
                 var played = Strs("played");
+                double at = Num("at", 0);
                 return Task.Run(() =>
                 {
                     if (ChannelOf(source) != null) return (object)new { ids = Picked(PickNext(played, source, chosen: false)) };
                     if (RadioPlaying(source) is not { } r) return new { ids = Array.Empty<string>() };
-                    return new { ids = Picked(PickNext(played, source, chosen: r.Kind == "smart")) };
+                    return new { ids = Picked(PickNext(played, source, chosen: r.Kind == "smart", at)) };
                 });
             }
             case "radio.vote.many":

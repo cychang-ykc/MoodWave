@@ -879,7 +879,9 @@
     const s = await (t.kind === 'radio' ? MC.api.rpc('radio.vote.many', { ids: [old], source: src })
                                         : MC.api.rpc('vote.many', { ids: [old], channel: t.ch })).catch(() => null);
     if (!s || !s.known || !(s.picked || []).includes(old)) return;
-    const r = await MC.api.rpc('radio.next', { played: ids.slice(Math.max(0, i + 1 - 50), i + 1), source: src }).catch(() => null);
+    // the track playing is a Smart Playlist seed from 30 s on (spec 6.4): where it is goes along
+    const pos = App.state && App.state.trackId === id ? App.pos : 0;
+    const r = await MC.api.rpc('radio.next', { played: ids.slice(Math.max(0, i + 1 - 50), i + 1), source: src, at: pos }).catch(() => null);
     const pick = r && r.ids && r.ids[0];
     const now = (App.queue || {}).ids || [];
     // only onto the queue as it was (nothing played on, added or taken out meanwhile)
@@ -887,6 +889,35 @@
     await Host.call('queue.add', { ids: [pick] });
     const after = (App.queue || {}).ids || [];
     if (after[i + 1] === old) Host.call('queue.remove', { i: i + 1 });
+  }
+
+  /*
+   * The Smart Playlist's pick after the track playing is picked again once that track gets to 30 s (by its position:
+   * a move of it there counts too), one time for each track (spec 6.3). MIKU asked for the pick as the track started,
+   * when it was no seed yet; from 30 s on it is one (0.6). Not for a track with a Smart Playlist vote (the vote changed
+   * the pick already), nor one shorter than 45 s (its pick may be in the player's hands for the next track already).
+   */
+  const HEARD = { at: 30, min: 45 };
+
+  function watchHeard() {
+    setInterval(() => {
+      const s = App.state || {}, id = s.trackId;
+      if (!id || s.live || !s.playing) return;
+      if (MC.heard !== id) { MC.heard = id; MC.heardDone = false; }
+      if (MC.heardDone || App.pos < HEARD.at) return;
+      MC.heardDone = true;
+      if ((s.dur || 0) >= HEARD.min) repickHeard(id);
+    }, 1000);
+  }
+
+  async function repickHeard(id) {
+    const q = App.queue || {}, ids = q.ids || [], i = q.index;
+    if (ids[i] !== id || i !== ids.length - 2) return;     // the track playing just before the queue's last
+    const src = rowSource(q, i + 1);
+    if (!src || src.ext !== 'moodchannels' || !src.smart) return;   // a Smart Playlist pick (radios and channels: not by what plays)
+    const v = await MC.api.rpc('radio.vote.many', { ids: [id], source: src }).catch(() => null);
+    if (!v || !v.known || (v.votes || {})[id]) return;
+    repickAfter(id, i);                                      // the last track a pick (not one the listener queued): checked there
   }
 
   /**
@@ -1422,6 +1453,7 @@
       MC.api = api;
       defs();
       coverSwipe();
+      watchHeard();
       // the cards' hover lift in whole screen pixels at this display scaling (moodchannels.css)
       const lift = () => document.documentElement.style.setProperty('--mc-lift', Math.round(6 * devicePixelRatio) / devicePixelRatio + 'px');
       lift();
