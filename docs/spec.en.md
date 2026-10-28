@@ -44,6 +44,7 @@ If this document and the code do not agree, the code is correct. Then correct th
 | weight | TN | A number that tells how much a seed counts. |
 | vote | TN | A 👍 or a 👎 that the listener gives to a track. |
 | play record | TN | A record of one track that played: the time and the seconds played. |
+| quick skip | TN | The listener moves on to another track before a track played for 30 seconds. |
 | loudness | TN | How loud a track sounds, in LUFS. |
 | `library.db` | TN | The database file of MoodWave. |
 | helper | TN | The MoodWave process on macOS (`moodwave-helper`). |
@@ -335,9 +336,24 @@ MoodWave decreases the score in these conditions:
 | Condition | Decrease |
 |---|---|
 | The track played in the last 7 days. | 0.15 (0 after 30 days) |
-| The track is very alike to a track that the listener skipped in less than 30 seconds, in the last 3 hours. | 0.10 |
+| The track is very alike to a track with a quick skip in the last 3 hours. | 0.10 |
 | The same song (another version) played before in this list. | 0.08 for each time |
 | The track is very alike to a track with 👎. | 0.15 |
+
+"Very alike" means a similarity of more than 0.9.
+
+A quick skip tells MoodWave that the listener does not want tracks like that track now.
+These rules apply to a quick skip:
+
+- If the same track plays again for 30 seconds or more, MoodWave cancels the decrease for its quick skip.
+  MoodWave uses the position in the track. Thus MoodWave cancels it at 30 seconds, or when the track stops.
+- A move back to the previous track is not a quick skip. The listener goes back to hear a track again, not to skip one.
+  Thus this move does not decrease scores.
+
+MIKU goes back to the previous track only in the first 3 seconds of the current track.
+After 3 seconds, the previous button starts the current track again.
+
+An older MIKU does not tell a move back from a skip. With an older MIKU, a move back is also a quick skip.
 
 MoodWave does not select these tracks:
 
@@ -480,7 +496,7 @@ Then MoodWave multiplies the weight by a listening factor:
 |---|---|
 | Half of the track or more | 1 |
 | 30 seconds or more, but less than half | 0.6 |
-| Less than 30 seconds, and the listener skipped it | The track is not a seed. |
+| Less than 30 seconds, and the listener skipped it or went back to the previous track | The track is not a seed. |
 
 The weight of the current track is 0.6. This weight does not increase when more of the track plays.
 Thus the tracks that the listener heard to the end have more effect than the current track.

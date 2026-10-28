@@ -197,6 +197,6 @@ sealed class Host : IMoodHost
     {
         static double D(JsonNode? n) => n == null ? 0 : n.GetValue<double>();
         TrackPlayed?.Invoke(new MoodPlayed((string)m["id"]!, D(m["seconds"]), D(m["duration"]), (bool?)m["skipped"] ?? false,
-            (bool?)m["stopped"] ?? false, m["source"] is JsonNode s ? JsonSerializer.SerializeToElement(s) : null));
+            (bool?)m["stopped"] ?? false, m["source"] is JsonNode s ? JsonSerializer.SerializeToElement(s) : null, (bool?)m["back"] ?? false));
     }
 }

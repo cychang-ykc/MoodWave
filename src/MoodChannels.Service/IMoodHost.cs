@@ -5,8 +5,11 @@ namespace MoodChannels.Service;
 /// <summary>One track of the player's library, as the service needs it (title and artist: for the radio).</summary>
 public sealed record MoodTrack(string Id, string Path, string Album, double Duration, long Size, long Mtime, string Title = "", string Artist = "");
 
-/// <summary>A track that stopped playing: seconds played, its length, whether the listener moved on or stopped, the queue's source.</summary>
-public sealed record MoodPlayed(string Id, double Seconds, double Duration, bool Skipped, bool Stopped, JsonElement? Source);
+/// <summary>
+/// A track that stopped playing: seconds played, its length, whether the listener moved on or stopped, the queue's
+/// source, and whether they went back to the previous track (Back: not a skip; an older player reports it as skipped).
+/// </summary>
+public sealed record MoodPlayed(string Id, double Seconds, double Duration, bool Skipped, bool Stopped, JsonElement? Source, bool Back = false);
 
 /// <summary>
 /// What the service needs from the player it runs in: MIKU on Windows (MoodChannels.Extension, in-process) or MIKU on

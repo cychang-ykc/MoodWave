@@ -285,7 +285,11 @@ public sealed class MoodService
         }
     }
 
-    /// <summary>A track stopped playing: kept (plays), and a quick skip makes the radio pass over ones like it.</summary>
+    /// <summary>
+    /// A track stopped playing: kept (plays), and a quick skip makes the radio pass over ones like it. Going back to the
+    /// previous track is no skip (the listener wants to hear that one again): kept as left early (no seed under 30 s),
+    /// with no pass-over.
+    /// </summary>
     void OnPlayed(MoodPlayed p)
     {
         var t = _host.Tracks.FirstOrDefault(x => x.Id == p.Id);
@@ -293,9 +297,9 @@ public sealed class MoodService
         string? kind = null;
         if (p.Source is { ValueKind: JsonValueKind.Object } s && s.TryGetProperty("ext", out var ext) && ext.GetString() == "moodchannels")
             kind = s.TryGetProperty("radio", out _) ? "radio" : s.TryGetProperty("channel", out _) ? "channel" : null;
-        try { _store.AddPlay(t.Path, DateTime.UtcNow, p.Seconds, p.Duration, p.Skipped, p.Stopped, kind); }
+        try { _store.AddPlay(t.Path, DateTime.UtcNow, p.Seconds, p.Duration, p.Skipped || p.Back, p.Stopped, kind); }
         catch (Exception ex) { _host.Log("play not recorded: " + ex.Message); }
-        _radio?.Played(t.Path, p.Seconds, p.Skipped);
+        _radio?.Played(t.Path, p.Seconds, p.Skipped && !p.Back);
     }
 
     /// <summary>The radio a queue's source describes ({radio: {kind, name, seeds}}), or null.</summary>
@@ -776,6 +780,17 @@ public sealed class MoodService
                     if (ChannelOf(source) != null) return (object)new { ids = Picked(PickNext(played, source, chosen: false)) };
                     if (RadioPlaying(source) is not { } r) return new { ids = Array.Empty<string>() };
                     return new { ids = Picked(PickNext(played, source, chosen: r.Kind == "smart", at)) };
+                });
+            }
+            case "radio.heard":
+            {
+                // the track playing got to 30 s (the page): an earlier quick skip of it no longer counts (spec 5.4)
+                string? id = Str("id");
+                return Task.Run(() =>
+                {
+                    var t = id == null ? null : _host.Tracks.FirstOrDefault(x => x.Id == id);
+                    if (t != null && !string.IsNullOrEmpty(t.Path)) _radio?.Heard(t.Path);
+                    return (object)new { ok = t != null };
                 });
             }
             case "radio.vote.many":

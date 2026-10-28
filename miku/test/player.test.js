@@ -49,6 +49,7 @@ class Engine extends EventEmitter {
   constructor() { super(); this.isLoaded = false; this.isPlaying = false; this.position = 0; this.track = null; }
   async load(t, pos, play) { this.track = t; this.isLoaded = true; this.isPlaying = !!play; this.position = pos || 0; }
   invalidateNext() { }
+  seek(pos) { this.position = pos; }
   stop() { this.isPlaying = false; }
 }
 
@@ -56,7 +57,7 @@ function make(s = {}) {
   const engine = new Engine();
   const p = new Player(engine, lib, { repeat: 'off', autoContinue: 'tracks', ...s });
   const played = [];
-  p.on('played', (t, seconds, skipped, stopped, source) => played.push({ id: t.id, seconds, skipped, stopped, source }));
+  p.on('played', (t, seconds, skipped, stopped, source, back) => played.push({ id: t.id, seconds, skipped, stopped, source, back: !!back }));
   return { p, engine, played };
 }
 
@@ -264,6 +265,22 @@ const tick = () => sleep(20);
     check('the live stream is never reported', !played.some(x => x.id === 'yt-live'), played.map(x => x.id));
     await p.jumpTo(1);
     check('the same track again (a reload): not reported', !played.slice(4).some(x => x.id === 'a2t2'), played.slice(4));
+  });
+
+  await group('previous: going back is no skip', async () => {
+    const { p, engine, played } = make();
+    await p.playList(ids(3), 1, false, 0, null);
+    engine.position = 2;                                     // in the first 3 s: back to the previous track
+    await p.previous();
+    const b = played[played.length - 1];
+    check('reported back, not skipped', played.length === 1 && b.id === 'a1t2' && b.back === true && b.skipped === false && b.seconds === 2, b);
+    check('the previous track plays', p.current && p.current.id === 'a1t1', p.current && p.current.id);
+    await p.next();
+    const n = played[played.length - 1];
+    check('next: skipped, not back', n.id === 'a1t1' && n.skipped === true && n.back === false, n);
+    engine.position = 40;                                    // after 3 s: the same track from its start, not left
+    await p.previous();
+    check('after 3 s: from the start, nothing reported', played.length === 2 && p.current.id === 'a1t2', played.length);
   });
 
   check('nothing logged as an error but the one asked for', errors.length === 1, errors);

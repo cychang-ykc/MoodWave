@@ -32,6 +32,35 @@ public class RadioTests : IDisposable
         store.Dispose();
     }
 
+    /// <summary>The quick skips the radio counts now (its pass-over of tracks like them).</summary>
+    static int Skips(Radio radio)
+    {
+        var f = typeof(Radio).GetField("_skips", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        return ((System.Collections.ICollection)f.GetValue(radio)!).Count;
+    }
+
+    [Fact]
+    public void A_quick_skip_counts_until_the_track_plays_30_seconds_after_all()
+    {
+        var store = new AnalysisStore(_dir);
+        store.Load();
+        var radio = new Radio(store, () => "m", _ => 120, _ => { });
+        store.AddClap("/m/a.flac", 1, 1, "m", 1, new List<(int, float[])> { (0, Vec(1)) });
+        store.AddClap("/m/b.flac", 1, 1, "m", 1, new List<(int, float[])> { (0, Vec(2)) });
+        radio.Ensure();
+
+        radio.Played("/m/a.flac", 5, skipped: true);       // a quick skip
+        radio.Played("/m/b.flac", 8, skipped: true);
+        Assert.Equal(2, Skips(radio));
+        radio.Played("/M/A.flac", 40, skipped: true);      // a played again, 30 s or more (moved on after it): its skip goes
+        Assert.Equal(1, Skips(radio));
+        radio.Heard("/m/b.flac");                           // b got to 30 s while it plays (the page)
+        Assert.Equal(0, Skips(radio));
+        radio.Played("/m/a.flac", 2, skipped: false);      // left, not skipped (back to the previous track): no skip
+        Assert.Equal(0, Skips(radio));
+        store.Dispose();
+    }
+
     static float[] Vec(int seed) { var r = new Random(seed); return Enumerable.Range(0, AnalysisStore.ClapDim).Select(_ => (float)r.NextDouble() - 0.5f).ToArray(); }
 
     /// <summary>
