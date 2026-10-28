@@ -195,13 +195,14 @@ sealed class ClapQueue
         int segments = Segments;
         var todo = new List<Job>();
         int total = 0, done = 0;
+        var counted = new HashSet<string>(StringComparer.OrdinalIgnoreCase);   // what this pass counted done
         foreach (var t in _tracks().OrderBy(t => t.Path, StringComparer.OrdinalIgnoreCase))
         {
             if (string.IsNullOrEmpty(t.Path)) continue;
             var e = _store.Get(t.Path);
             if (e == null || !e.Ok || !AnalysisStore.Current(e, t.Size, t.Mtime)) continue;   // the DSP analysis first
             total++;
-            if (model != null && !Needs(_store.Clap(t.Path), t.Size, t.Mtime, model, segments)) { done++; continue; }
+            if (model != null && !Needs(_store.Clap(t.Path), t.Size, t.Mtime, model, segments)) { done++; counted.Add(t.Path); continue; }
             todo.Add(new Job(t.Path, t.Size, t.Mtime));
         }
         lock (_lock)
@@ -211,6 +212,9 @@ sealed class ClapQueue
             var first = new HashSet<string>(_urgent.Concat(_fresh).Select(j => j.Path), StringComparer.OrdinalIgnoreCase);
             _pending.Clear();
             foreach (var j in todo) if (!first.Contains(j.Path) && !_running.Contains(j.Path)) _pending.AddLast(j);
+            // a file the process has on hand counts when it is done, and only then: it is stored before it is counted,
+            // and this pass may have read it from the store in between (counted twice: more done than all)
+            foreach (var p in _running) if (counted.Contains(p)) done--;
             (_total, _done) = (total, done);
         }
         Wake();
