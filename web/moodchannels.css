@@ -416,11 +416,41 @@ html:root.mc-radio #np-cover.mc-dragging { cursor: grabbing; }
 .mc-swipe-hint.l { transform: translate(-100%, -50%); flex-direction: row-reverse; --mc-nudge: -7px; }
 .mc-swipe-hint.l .mc-chev { transform: scaleX(-1); }
 .mc-swipe-hint.l .i { transform: rotate(180deg); }
-/* no room beside the cover (moodchannels.js crowded): on the cover's own edge, white with a soft shadow to read on any art */
-.mc-swipe-hint.in { color: #fff; filter: drop-shadow(0 1px 3px rgba(0,0,0,.6)); }
-.mc-swipe-hint.in .i { opacity: .7; }
-.mc-swipe-hint.r.in { transform: translate(-100%, -50%); }
-.mc-swipe-hint.l.in { transform: translateY(-50%); }
+/* no room for the icons beside the cover (moodchannels.js crowded): a soft warm light glows out from behind its left and
+   right sides instead, like a hidden light strip, in the cover's own shape (rounded square, the vinyl theme's disc …:
+   --mc-radius, the cover's border-radius), and only there: none above or below it, the light dying away towards the
+   top and bottom corners by itself, with a faint extra reach at mid-height that leads the eye sideways; it breathes
+   slowly, widening a little, as if the cover could be pulled either way. The light is two side shadows of a copy of the
+   cover's shape (b), each pushed out sideways and shrunk by as much as its blur so it never reaches past the top or
+   bottom: nothing cut off. Behind the cover (z-index -1 in .np-left) and under all else: nothing covered. --mc-halo:
+   how far it reaches, from moodchannels.js; --mc-pulses breaths (it sets 3) */
+.mc-swipe-glow { position: absolute; z-index: -1; pointer-events: none; opacity: 0;
+  animation: mc-swipe-hint-show calc(.7s + 3s * var(--mc-pulses, 3)) linear both; }
+.mc-swipe-glow > i { position: absolute; --mc-pad: calc(var(--mc-halo, 40px) * 1.8); inset: calc(var(--mc-pad) * -1); opacity: 0;
+  --mc-light: color-mix(in srgb, rgb(var(--np-ink, 255, 255, 255)) 60%, #ffbf73);
+  --mc-blur: calc(var(--mc-halo, 40px) * .5);
+  background:   /* the faint extra reach at mid-height, either side */
+    radial-gradient(calc(var(--mc-halo, 40px) * 1.4) min(var(--mc-halo, 40px) * 1.3, var(--mc-h, 200px) * .4) at var(--mc-pad) 50%, color-mix(in srgb, var(--mc-light) 45%, transparent),
+      color-mix(in srgb, var(--mc-light) 18%, transparent) 40%, color-mix(in srgb, var(--mc-light) 5%, transparent) 72%, transparent),
+    radial-gradient(calc(var(--mc-halo, 40px) * 1.4) min(var(--mc-halo, 40px) * 1.3, var(--mc-h, 200px) * .4) at calc(100% - var(--mc-pad)) 50%, color-mix(in srgb, var(--mc-light) 45%, transparent),
+      color-mix(in srgb, var(--mc-light) 18%, transparent) 40%, color-mix(in srgb, var(--mc-light) 5%, transparent) 72%, transparent);
+  animation: mc-swipe-glow 3s ease-in-out .7s var(--mc-pulses, 3) both; }
+.mc-swipe-glow > i > b { position: absolute; inset: calc(var(--mc-pad) - var(--mc-ring, 0px)); border-radius: calc(var(--mc-radius, 14px) + var(--mc-ring, 0px));
+  box-shadow: calc(var(--mc-blur) * -.85) 0 var(--mc-blur) calc(var(--mc-blur) * -1.05) var(--mc-light),
+    calc(var(--mc-blur) * .85) 0 var(--mc-blur) calc(var(--mc-blur) * -1.05) var(--mc-light); }
+.mc-swipe-glow.on-light > i { --mc-light: var(--teal, #39c5bb); }   /* a light page: its accent (moodchannels.js) */
+/* the vinyl theme: a holy light, a white glow right at the record's edge inside a golden aura, as light reads on its
+   pale sage page only by its colour (white alone vanishes there, its burnt-orange accent read as a stain): the aura
+   is the usual side light in gold, the white a second, tighter pair of side shadows */
+:root[data-theme="vinyl"] .mc-swipe-glow > i { --mc-light: #ffcf5c; --mc-blur: calc(var(--mc-halo, 40px) * .6); }
+:root[data-theme="vinyl"] .mc-swipe-glow > i > b {
+  box-shadow: calc(var(--mc-blur) * -.85) 0 var(--mc-blur) calc(var(--mc-blur) * -1.05) var(--mc-light),
+    calc(var(--mc-blur) * .85) 0 var(--mc-blur) calc(var(--mc-blur) * -1.05) var(--mc-light),
+    calc(var(--mc-blur) * -.45) 0 calc(var(--mc-blur) * .5) calc(var(--mc-blur) * -.5) #fff,
+    calc(var(--mc-blur) * .45) 0 calc(var(--mc-blur) * .5) calc(var(--mc-blur) * -.5) #fff; }
+@keyframes mc-swipe-glow { 0%, 100% { opacity: 0; scale: .97 1; } 50% { opacity: 1; scale: 1.03 1; } }
+.mc-swipe-glow.hover { animation: mc-swipe-hint-in .25s ease-out both; }
+.mc-swipe-glow.hover > i { animation-delay: 0s; animation-iteration-count: infinite; }
 @keyframes mc-swipe-hint {
   0% { opacity: 0; translate: 0 0; } 45% { opacity: .38; } 70% { translate: var(--mc-nudge) 0; } 100% { opacity: 0; translate: var(--mc-nudge) 0; }
 }
@@ -430,7 +460,7 @@ html:root.mc-radio #np-cover.mc-dragging { cursor: grabbing; }
 .mc-swipe-hint.hover { animation: mc-swipe-hint-in .25s ease-out both; }
 .mc-swipe-hint.hover .mc-chev { animation-delay: 0s; animation-iteration-count: infinite; }
 @keyframes mc-swipe-hint-in { from { opacity: 0; } to { opacity: 1; } }
-@media (prefers-reduced-motion: reduce) { .mc-swipe-hint { display: none; } }
+@media (prefers-reduced-motion: reduce) { .mc-swipe-hint, .mc-swipe-glow { display: none; } }
 /* the bar's radio label opens the now-playing page: the whole label answers the pointer (the 👍 / 👎 keep their own) */
 .mc-radio-band.mc-radio-open { cursor: pointer; outline: none; border-radius: 14px; }
 .mc-radio-open:focus-visible { box-shadow: inset 0 0 0 2px currentColor; }

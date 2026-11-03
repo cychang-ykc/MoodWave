@@ -610,10 +610,11 @@
    * That the cover can be swiped: each time the now-playing page opens while a radio plays, a faint 👎 « and » 👍 beside
    * the cover (moodchannels.css mc-swipe-hint): the « » pulse outwards a few times while the 👎 / 👍 stay still, then
    * all go together; a swipe meanwhile takes them away at once. Icons only, not buttons: the swipe is the vote. Placed
-   * by the cover's own layout place in .np-left (offsetLeft / offsetTop: not moved by the page sliding in). A side with
-   * no room beside the cover (a narrow window puts the song info right next to it) goes on the cover's edge instead.
+   * by the cover's own layout place in .np-left (offsetLeft / offsetTop: not moved by the page sliding in). Never over
+   * anything: with no room for both beside the cover (a narrow window puts the song info right next to it), a soft light
+   * glows out from behind the cover's sides instead, in its own shape.
    */
-  const HINT = { gap: 22, inset: 14, pulses: 5 };
+  const HINT = { gap: 22, pulses: 5 };
   const CHEVRONS = '<svg class="mc-chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 6l6 6-6 6M12 6l6 6-6 6"/></svg>';
   /** The chevrons' size, from the cover's. */
   const hintSize = cover => Math.round(Math.min(28, Math.max(18, cover.offsetWidth * .05)));
@@ -639,34 +640,73 @@
     hintOff();
     const left = cover.parentElement;
     if (!left) return;
-    const y = cover.offsetTop + cover.offsetHeight / 2, size = hintSize(cover);
-    MC.hint = ['l', 'r'].map(side => {
+    const y = cover.offsetTop + cover.offsetHeight / 2;
+    const done = el => { if (!hover) el.addEventListener('animationend', e => { if (e.target === el && !e.pseudoElement) el.remove(); }); };
+    const els = ['l', 'r'].map(side => {
       // » 👍 on the right, 👎 « on the left
       const el = h('div', { class: 'mc-swipe-hint ' + side + (hover ? ' hover' : ''), 'aria-hidden': 'true', html: CHEVRONS + THUMB });
-      el.style.setProperty('--mc-hint', size + 'px');
       el.style.setProperty('--mc-pulses', HINT.pulses);
       el.style.top = y + 'px';
-      el.style.left = (side === 'l' ? cover.offsetLeft - HINT.gap : cover.offsetLeft + cover.offsetWidth + HINT.gap) + 'px';
-      if (!hover) el.addEventListener('animationend', e => { if (e.target === el) el.remove(); });   // not the chevrons' pulses
+      done(el);   // not the chevrons' pulses
       left.append(el);
-      if (crowded(el, left, cover)) {
-        // no room beside the cover (the song info next to it, or the window's edge): on the cover's own edge instead
-        el.classList.add('in');
-        el.style.left = (side === 'l' ? cover.offsetLeft + HINT.inset : cover.offsetLeft + cover.offsetWidth - HINT.inset) + 'px';
-      }
       return el;
     });
+    // the first place where both fit, the pair always mirrored: never on the cover, the song info or anything else
+    for (const [size, gap] of [[hintSize(cover), HINT.gap], [hintSize(cover), 12], [16, 8]]) {
+      for (const el of els) {
+        el.style.setProperty('--mc-hint', size + 'px');
+        el.style.left = (el.classList.contains('l') ? cover.offsetLeft - gap : cover.offsetLeft + cover.offsetWidth + gap) + 'px';
+      }
+      if (!els.some(el => crowded(el, cover))) { MC.hint = els; return; }
+    }
+    // no room beside the cover (a narrow window puts the song info right next to it): a soft light glows out from
+    // behind its left and right sides instead, in the cover's own shape (moodchannels.css mc-swipe-glow), under
+    // everything else on the page
+    for (const el of els) el.remove();
+    const glow = h('div', { class: 'mc-swipe-glow' + (hover ? ' hover' : ''), 'aria-hidden': 'true', html: '<i><b></b></i>' });
+    glow.style.setProperty('--mc-pulses', 3);   // slow breaths (moodchannels.css mc-swipe-glow), 3 s each
+    glow.style.setProperty('--mc-halo', Math.round(Math.min(64, Math.max(36, cover.offsetWidth * .28))) + 'px');
+    glow.style.setProperty('--mc-h', cover.offsetHeight + 'px');
+    const cs = getComputedStyle(cover);
+    glow.style.setProperty('--mc-radius', cs.borderRadius);
+    // a ring drawn round the cover by its box-shadow (the vinyl theme's record edge): the light starts outside it
+    const ring = Math.max(0, ...[...cs.boxShadow.matchAll(/(-?[\d.]+)px (-?[\d.]+)px ([\d.]+)px ([\d.]+)px/g)]
+      .filter(m => +m[1] === 0 && +m[2] === 0 && +m[3] === 0).map(m => +m[4]));
+    glow.style.setProperty('--mc-ring', ring + 'px');
+    // warm light on a dark page; on a light one (dark ink) light would vanish and the ink would read as a shadow: the
+    // theme's accent instead
+    const ink = cs.getPropertyValue('--np-ink').split(',').map(Number);
+    if (ink.length === 3 && .2126 * ink[0] + .7152 * ink[1] + .0722 * ink[2] < 128) glow.classList.add('on-light');
+    Object.assign(glow.style, { left: cover.offsetLeft + 'px', top: cover.offsetTop + 'px',
+      width: cover.offsetWidth + 'px', height: cover.offsetHeight + 'px' });
+    done(glow);
+    left.append(glow);
+    MC.hint = [glow];
+    // the cover's own scale, as it changes (the vinyl theme shrinks the record while paused): the light stays right
+    // at its edge instead of a gap opening between them
+    (function follow() {
+      if (!glow.isConnected) return;
+      glow.style.scale = cover.getBoundingClientRect().width / cover.offsetWidth || 1;
+      requestAnimationFrame(follow);
+    })();
   }
 
-  /** Whether the hint beside the cover touches what else is in .np-left (title, artist, badges …) or leaves the window. */
-  function crowded(el, left, cover) {
-    const r = el.getBoundingClientRect();
-    if (r.left < 0 || r.right > window.innerWidth) return true;
-    const near = 6;
-    return [...left.querySelectorAll(':scope > *, .np-info > *')].some(o => {
-      if (o === cover || o === el || o.classList.contains('mc-swipe-hint')) return false;
+  /**
+   * Whether the hint beside the cover leaves the window or touches anything shown on the page: the cover, the song info,
+   * the radio's band (#np-ext), the lyrics … Anything drawn there, so every layout is covered, not only the known ones;
+   * what lies wholly behind the cover (the page's backdrop, the cover's own picture) is not in the way.
+   */
+  function crowded(el, cover) {
+    const near = 6, r = el.getBoundingClientRect(), c = cover.getBoundingClientRect();
+    const hits = b => b.width > 0 && b.height > 0 && b.left < r.right + near && b.right > r.left - near && b.top < r.bottom + near && b.bottom > r.top - near;
+    if (r.left < 0 || r.right > window.innerWidth || hits(c)) return true;
+    const np = document.getElementById('np') || document.body;
+    return [...np.querySelectorAll('*')].some(o => {
+      if (o.closest('.mc-swipe-hint, .mc-swipe-glow') || cover.contains(o)) return false;
+      if (o.firstElementChild && ![...o.childNodes].some(n => n.nodeType === 3 && n.textContent.trim())) return false;   // only what draws
       const b = o.getBoundingClientRect();
-      return b.width > 0 && b.height > 0 && b.left < r.right + near && b.right > r.left - near && b.top < r.bottom && b.bottom > r.top;
+      if (!hits(b) || (b.left <= c.left && b.right >= c.right && b.top <= c.top && b.bottom >= c.bottom)) return false;
+      return o.checkVisibility ? o.checkVisibility({ opacityProperty: true, visibilityProperty: true }) : true;
     });
   }
 
